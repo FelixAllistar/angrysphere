@@ -1,107 +1,93 @@
----
+# CLAUDE.md
 
-Default to using Bun instead of Node.js.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-- Use `bun <file>` instead of `node <file>` or `ts-node <file>`
-- Use `bun test` instead of `jest` or `vitest`
-- Use `bun build <file.html|file.ts|file.css>` instead of `webpack` or `esbuild`
-- Use `bun install` instead of `npm install` or `yarn install` or `pnpm install`
-- Use `bun run <script>` instead of `npm run <script>` or `yarn run <script>` or `pnpm run <script>`
-- Bun automatically loads .env, so don't use dotenv.
+## Project Overview
 
-## APIs
+This is an Angry Birds-style physics game built with TypeScript and the OpenTUI terminal rendering framework. The project demonstrates advanced terminal graphics capabilities including:
 
-- `Bun.serve()` supports WebSockets, HTTPS, and routes. Don't use `express`.
-- `bun:sqlite` for SQLite. Don't use `better-sqlite3`.
-- `Bun.redis` for Redis. Don't use `ioredis`.
-- `Bun.sql` for Postgres. Don't use `pg` or `postgres.js`.
-- `WebSocket` is built-in. Don't use `ws`.
-- Prefer `Bun.file` over `node:fs`'s readFile/writeFile
-- Bun.$`ls` instead of execa.
+- Real-time 3D rendering with WebGPU in terminal
+- 2D physics simulation using Rapier2D
+- Sprite animation and particle systems
+- Mouse interaction and input handling
+- Terminal-based UI components
 
-## Testing
+## Development Commands
 
-Use `bun test` to run tests.
-
-```ts#index.test.ts
-import { test, expect } from "bun:test";
-
-test("hello world", () => {
-  expect(1).toBe(1);
-});
+### Running the Application
+```bash
+bun run index.ts
 ```
 
-## Frontend
-
-Use HTML imports with `Bun.serve()`. Don't use `vite`. HTML imports fully support React, CSS, Tailwind.
-
-Server:
-
-```ts#index.ts
-import index from "./index.html"
-
-Bun.serve({
-  routes: {
-    "/": index,
-    "/api/users/:id": {
-      GET: (req) => {
-        return new Response(JSON.stringify({ id: req.params.id }));
-      },
-    },
-  },
-  // optional websocket support
-  websocket: {
-    open: (ws) => {
-      ws.send("Hello, world!");
-    },
-    message: (ws, message) => {
-      ws.send(message);
-    },
-    close: (ws) => {
-      // handle close
-    }
-  },
-  development: {
-    hmr: true,
-    console: true,
-  }
-})
+### Dependencies Management
+```bash
+bun install        # Install dependencies
 ```
 
-HTML files can import .tsx, .jsx or .js files directly and Bun's bundler will transpile & bundle automatically. `<link>` tags can point to stylesheets and Bun's CSS bundler will bundle.
+### Physics and Rendering
+The game uses Bun as the runtime and includes several physics and rendering libraries:
+- `@dimforge/rapier2d-simd-compat` for 2D physics
+- `three` for 3D graphics primitives
+- `planck` as alternative physics engine
+- `yoga-layout` for flexbox-style layouts
 
-```html#index.html
-<html>
-  <body>
-    <h1>Hello, world!</h1>
-    <script type="module" src="./frontend.tsx"></script>
-  </body>
-</html>
+## Documentation
+
+The comprehensive OpenTUI API documentation is available in `API.md`. Key areas include:
+
+- **Core Rendering System**: `CliRenderer` for terminal management, `Renderable` base class hierarchy
+- **3D Engine**: `ThreeCliRenderer` with WebGPU integration, sprite system with `SpriteAnimator` and `SpriteResourceManager`
+- **UI Components**: `SelectElement`, `InputElement`, and flexbox-style layout system
+- **Animation**: Timeline-based keyframe animation with easing functions
+- **Physics Integration**: Rapier2D and Planck physics adapters with explosion systems
+- **Input Handling**: Mouse events with coordinate transformation and keyboard input parsing
+- **Post-Processing**: Visual effects filters (scanlines, vignette, blur, etc.)
+
+## Architecture Overview
+
+### Core Framework (`opentui-src/`)
+The OpenTUI framework provides terminal-based rendering capabilities:
+
+- **Rendering System**: `CliRenderer` class manages terminal output, frame buffers, and render loops
+- **3D Engine**: `ThreeCliRenderer` integrates Three.js with WebGPU for 3D graphics in terminal
+- **UI Components**: Input elements, select components, layout system with yoga-layout
+- **Animation**: Timeline-based animation system with easing functions
+- **Physics Integration**: Adapters for both Rapier and Planck physics engines
+
+### Game Implementation (`index.ts`)
+Main game logic implements:
+
+- **Physics Objects**: Dynamic rigid bodies for birds and boxes using Rapier2D
+- **Sprite System**: Animated sprites with texture management and resource loading
+- **Input Handling**: Mouse drag-to-aim mechanics and keyboard controls
+- **Scene Management**: 3D scene with lighting, background, moving clouds, and ground
+- **Game State**: Centralized state management for physics world, objects, and UI
+
+### Key Architectural Patterns
+
+1. **Renderable Tree**: All visual elements extend `Renderable` base class and form a hierarchical tree
+2. **Frame Buffers**: Optimized rendering to separate buffers for performance
+3. **Event System**: Mouse and keyboard events bubble through renderable hierarchy
+4. **Resource Management**: Centralized sprite and texture resource loading
+5. **Physics Integration**: Seamless sync between physics simulation and visual representation
+
+### Asset Pipeline
+Assets are imported using Bun's asset importing with type annotations:
+```typescript
+import cratePath from "./assets/crate.png" with { type: "image/png" }
 ```
 
-With the following `frontend.tsx`:
+### Performance Considerations
+- Uses native Zig rendering backend for terminal output optimization
+- Optional threading support (disabled on Linux due to stdlib issues)
+- Frame rate targeting with configurable FPS limits
+- Memory usage tracking and optimization
+- Hit testing grid for efficient mouse interaction
 
-```tsx#frontend.tsx
-import React from "react";
+## Development Notes
 
-// import .css files directly and it works
-import './index.css';
-
-import { createRoot } from "react-dom/client";
-
-const root = createRoot(document.body);
-
-export default function Frontend() {
-  return <h1>Hello, world!</h1>;
-}
-
-root.render(<Frontend />);
-```
-
-Then, run index.ts
-
-```sh
-bun --hot ./index.ts
-```
-
-For more information, read the Bun API docs in `node_modules/bun-types/docs/**.md`.
+- Game state is managed through a single `GameState` interface
+- Physics world updates are synchronized with sprite positions each frame
+- Mouse coordinates are converted from screen space to world coordinates
+- Debug logging is written to `engine-debug.log` and `engine-engine-debug.log`
+- The project uses ES modules and targets modern JavaScript features
