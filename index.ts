@@ -34,6 +34,7 @@ const GRAVITY = { x: 0.0, y: -9.81 }
 const LAUNCH_POWER_MULTIPLIER = 8.0
 const MAX_LAUNCH_DISTANCE = 4.0
 
+
 interface PhysicsObject {
   rigidBody: RAPIER.RigidBody
   sprite: TiledSprite
@@ -42,6 +43,7 @@ interface PhysicsObject {
   id: string
   type: 'bird' | 'box'
 }
+
 
 interface GameState {
   engine: ThreeCliRenderer
@@ -95,6 +97,7 @@ const materialFactory = () =>
   })
 
 
+
 async function createPhysicsObject(
   state: GameState,
   x: number,
@@ -115,6 +118,7 @@ async function createPhysicsObject(
   const colliderDesc = type === 'bird'
     ? RAPIER.ColliderDesc.ball(Math.min(width, height) * 0.4).setDensity(5.0)
     : RAPIER.ColliderDesc.cuboid(width * 0.4, height * 0.4)
+
 
   colliderDesc.setRestitution(0.3).setFriction(0.8)
   state.physicsWorld.createCollider(colliderDesc, rigidBody)
@@ -141,6 +145,7 @@ async function createPhysicsObject(
       type,
     }
 
+
     state.objects.push(obj)
     return obj
   } catch (error) {
@@ -150,24 +155,72 @@ async function createPhysicsObject(
   }
 }
 
+
 async function createLevel(state: GameState): Promise<void> {
-  // Create a pyramid of boxes on the right side
+  // Create a fun castle with towers and connected bridge
   const boxSize = 0.8
+  const spacing = boxSize * 1.1
   const startX = 6
-  const startY = -8.5
-  const rows = 5
+  const startY = -10.0 + boxSize / 2
 
-  for (let row = 0; row < rows; row++) {
-    const boxesInRow = rows - row
-    const rowStartX = startX + (row * boxSize * 0.5)
-    const rowY = startY + (row * boxSize * 1.1)
+  // Store references to key blocks for connecting later
+  const leftTowerBlocks: PhysicsObject[] = []
+  const rightTowerBlocks: PhysicsObject[] = []
 
-    for (let col = 0; col < boxesInRow; col++) {
-      const boxX = rowStartX + (col * boxSize * 1.1)
-      await createPhysicsObject(state, boxX, rowY, boxSize, boxSize, 'box')
-    }
+  // Left tower (tall and narrow - easy to topple)
+  for (let i = 0; i < 6; i++) {
+    const block = await createPhysicsObject(state, startX, startY + i * spacing, boxSize, boxSize, 'box')
+    if (block) leftTowerBlocks.push(block)
   }
-  // Boxes created
+
+  // Right tower (tall and narrow)  
+  for (let i = 0; i < 6; i++) {
+    const block = await createPhysicsObject(state, startX + 5 * spacing, startY + i * spacing, boxSize, boxSize, 'box')
+    if (block) rightTowerBlocks.push(block)
+  }
+
+  // Castle gate base (2 blocks wide gap in middle)
+  await createPhysicsObject(state, startX + spacing, startY, boxSize, boxSize, 'box')
+  await createPhysicsObject(state, startX + 4 * spacing, startY, boxSize, boxSize, 'box')
+
+  // Gate pillars (weak support columns)
+  for (let i = 1; i < 4; i++) {
+    await createPhysicsObject(state, startX + spacing, startY + i * spacing, boxSize, boxSize, 'box')
+    await createPhysicsObject(state, startX + 4 * spacing, startY + i * spacing, boxSize, boxSize, 'box')
+  }
+
+  // Bridge across the top - now connected to towers with joints!
+  const leftBridge = await createPhysicsObject(state, startX + 2 * spacing, startY + 4 * spacing, boxSize, boxSize, 'box')
+  const rightBridge = await createPhysicsObject(state, startX + 3 * spacing, startY + 4 * spacing, boxSize, boxSize, 'box')
+
+  // Connect the two bridge blocks together (solid bridge)
+  if (leftBridge && rightBridge) {
+    const bridgeJointParams = RAPIER.JointData.fixed(
+      { x: spacing * 0.5, y: 0.0 }, 0.0,  // Connection point on left bridge (half spacing to center)
+      { x: -spacing * 0.5, y: 0.0 }, 0.0  // Connection point on right bridge (negative half spacing to center)
+    )
+    state.physicsWorld.createImpulseJoint(bridgeJointParams, leftBridge.rigidBody, rightBridge.rigidBody, true)
+  }
+
+  // Connect bridge ends to tower tops (breakable under stress)
+  if (leftBridge && leftTowerBlocks[4]) {
+    const leftJointParams = RAPIER.JointData.fixed(
+      { x: 0.0, y: 0.0 }, 0.0,           // Connection point on tower top
+      { x: -spacing * 2, y: 0.0 }, 0.0   // Connection point on bridge (left end)
+    )
+    state.physicsWorld.createImpulseJoint(leftJointParams, leftTowerBlocks[4].rigidBody, leftBridge.rigidBody, true)
+  }
+
+  if (rightBridge && rightTowerBlocks[4]) {
+    const rightJointParams = RAPIER.JointData.fixed(
+      { x: 0.0, y: 0.0 }, 0.0,           // Connection point on tower top  
+      { x: spacing * 2, y: 0.0 }, 0.0    // Connection point on bridge (right end)
+    )
+    state.physicsWorld.createImpulseJoint(rightJointParams, rightTowerBlocks[4].rigidBody, rightBridge.rigidBody, true)
+  }
+
+  // Crown jewel - single box on top of left tower (prime target!)
+  await createPhysicsObject(state, startX, startY + 6 * spacing, boxSize, boxSize, 'box')
 }
 
 async function resetBird(state: GameState): Promise<void> {
@@ -509,6 +562,7 @@ export async function run(renderer: CliRenderer): Promise<void> {
   })
   parentContainer.add(debugText)
 
+
   const state: GameState = {
     engine, scene, camera, resourceManager, spriteAnimator,
     physicsWorld: world, ground, objects: [],
@@ -655,6 +709,9 @@ export async function run(renderer: CliRenderer): Promise<void> {
 
     updatePhysics(state, deltaTime);
     state.spriteAnimator.update(deltaTime)
+    
+    // No shader uniforms to update with basic materials
+    // (We'll add this back when we implement proper shaders later)
     
     // Debug frame rendering
     const frameStart = Date.now()
